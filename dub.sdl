@@ -1,0 +1,7 @@
+name "testo"
+description "Continuous Integration"
+authors "Martin Nowak"
+copyright "Copyright © 2017, Martin Nowak"
+license "MIT"
+dependency "vibe-d:web" version="~>0.8.3-alpha.2+commit.3.g5766e513"
+dependency "d2sqlite3" version="~>0.9"
