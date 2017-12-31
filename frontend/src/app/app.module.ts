@@ -13,6 +13,7 @@ import { BackendService } from './backend.service';
 import { LoginComponent } from './login/login.component';
 import { BuildListComponent } from './build-list/build-list.component';
 import { RunnerListComponent } from './runner-list/runner-list.component';
+import { ProjectListComponent } from './project-list/project-list.component';
 import { PageNotFoundComponent } from './page-not-found/page-not-found.component';
 
 import { environment } from '../environments/environment';
@@ -21,6 +22,7 @@ const appRoutes: Routes = [
   { path: '', redirectTo: '/builds', pathMatch: 'full' },
   { path: 'login', component: LoginComponent },
   { path: 'builds', component: BuildListComponent },
+  { path: 'projects', component: ProjectListComponent },
   { path: 'runners', component: RunnerListComponent },
   { path: '**', component: PageNotFoundComponent },
 ];
@@ -33,7 +35,8 @@ const appRoutes: Routes = [
     LoginComponent,
     BuildListComponent,
     RunnerListComponent,
-    PageNotFoundComponent
+    PageNotFoundComponent,
+    ProjectListComponent
   ],
   imports: [
     BrowserModule,
