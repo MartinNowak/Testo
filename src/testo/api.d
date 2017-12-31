@@ -1,17 +1,28 @@
 ///
 module testo.api;
 
-import d2sqlite3;
-import std.datetime;
-import vibe.core.log, vibe.data.json, vibe.http.router, vibe.http.server, vibe.web.rest;
+import std.datetime, std.typecons : Nullable;
+import vibe.core.log, vibe.data.json, vibe.http.router, vibe.http.client, vibe.http.server, vibe.web.rest, vibe.inet.url;
 
-void registerAPI(Database db, URLRouter router)
+import testo.db;
+
+import testo.config;
+
+void registerAPI(DB db, URLRouter router)
 {
+    import std.traits : EnumMembers;
+
+    auto testo = new TestoAPI(db);
     auto glr = new GitlabRunnerAPI(db);
-    router.registerRestInterface(new TestoAPI(db));
+    router.registerRestInterface(testo);
     router.registerRestInterface(glr);
     router.post("/api/v4/jobs/request", &glr.requestJob);
     router.patch("/api/v4/jobs/:id/trace", &glr.patchTrace);
+    foreach (provider; EnumMembers!(OAuth2Provider))
+    {
+        auto auth = new OAuth2Login!provider(db, __traits(getMember, config, provider));
+        auth.register(router);
+    }
 }
 
 struct Runner { string name; bool active; }
@@ -23,9 +34,70 @@ struct Runner { string name; bool active; }
 }
 
 ///
+URL params(URL url, string[string] kv) @safe
+{
+    import std.string : join;
+    import std.algorithm.iteration : map;
+
+    url.queryString = kv.byKeyValue
+        .map!(p => p.key.urlEncode ~ "=" ~ p.value.urlEncode)
+        .join("&");
+    return url;
+}
+/// ditto
+URL params(string url, string[string] kv) @safe
+{
+    return params(URL(url), kv);
+}
+
+///
+Json requestJSON(HTTPMethod method, URL url, string authToken = null, scope void delegate(scope HTTPClientRequest req) @safe dg = null) @safe
+{
+    import std.conv : to;
+    import vibe.stream.operations : readAllUTF8;
+    import vibe.http.common : urlEncode;
+
+
+    Json ret;
+    requestHTTP(
+        url,
+        (scope req)
+        {
+            if (authToken.length)
+                req.headers["Authorization"] = "Bearer " ~ authToken;
+            req.headers["Accept"] = "application/json";
+            req.method = method;
+            if (dg !is null)
+                dg(req);
+        },
+        (scope res)
+        {
+            if (res.statusCode / 100 != 2)
+            {
+                auto msg = res.bodyReader.readAllUTF8;
+                logWarn("%s %s, %d %s\n%s", method, url, res.statusCode, res.statusPhrase, msg);
+                ret = serializeToJson(["error": ["code": res.statusCode.to!string, "message": msg]]);
+            }
+            else
+            {
+                logInfo("%s %s, %d %s\n", method, url, res.statusCode, res.statusPhrase);
+                ret = res.readJson;
+            }
+        }
+    );
+
+    return ret;
+}
+///
+Json requestJSON(HTTPMethod method, string url, string authToken = null, scope void delegate(scope HTTPClientRequest req) @safe dg = null) @safe
+{
+    return requestJSON(method, URL(url), authToken, dg);
+}
+
+///
 class TestoAPI : ITestoAPI
 {
-    this(Database db)
+    this(DB db)
     {
         this.db = db;
     }
@@ -36,7 +108,156 @@ class TestoAPI : ITestoAPI
     }
 
 private:
-    Database db;
+    DB db;
+}
+
+///
+struct OAuth2Login(OAuth2Provider provider)
+{
+    void register(ref URLRouter router)
+    {
+        logInfo("%s", creds);
+        router.get("/api/oauth2/" ~ provider, &requestToken);
+        router.get("/api/oauth2/" ~ provider ~ "_callback", &oauthCallback);
+    }
+
+private:
+    void requestToken(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        // redirect user to confirm grants and request a token
+        return res.redirect(
+            requestURL.params(
+                [
+                    "client_id": creds.clientID,
+                    "redirect_uri": config.externalURL ~ "/api/oauth2/" ~ provider ~ "_callback",
+                    "response_type": "code",
+                    "state": "FIXME_FIXME_FIXME",
+                    "scope": scopes,
+                ]));
+    }
+
+    void oauthCallback(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        import std.exception : enforce;
+        import vibe.http.common : urlEncode;
+
+        auto url = req.fullURL;
+        auto code = req.query.get("code");
+        auto state = req.query.get("state");
+        logInfo("%s", req.fullURL);
+
+        // TOOD: secure salt for state
+        enforce(state == "FIXME_FIXME_FIXME", new HTTPStatusException(HTTPStatus.unauthorized));
+
+        auto json = requestJSON(
+            HTTPMethod.POST, tokenURL, null,
+            (scope req)
+            {
+                import vibe.http.auth.basic_auth;
+
+                req.addBasicAuth(creds.clientID, creds.clientSecret);
+                req.writeFormBody(
+                    [
+                        "code": code,
+                        "state": state,
+                        "grant_type": "authorization_code",
+                        "redirect_uri": config.externalURL ~ "/api/oauth2/" ~ provider ~ "_callback",
+                    ]
+                );
+            }
+        );
+        logInfo("%s", json);
+        enforce("error" !in json, json["error"].toString);
+        auto user = getUserInfo(json);
+        logInfo("%s", user);
+        () @trusted { db.insert(user); }(); // TODO: update
+
+        // TOOD: get redirect URL from state
+        res.redirect("http://localhost:4200/after_login");
+    }
+
+private:
+    static if (provider == OAuth2Provider.GitHub)
+    {
+        enum requestURL = "https://github.com/login/oauth/authorize";
+        enum tokenURL = "https://github.com/login/oauth/access_token";
+        enum scopes = "";
+
+        User getUserInfo(Json json)
+        {
+            User user;
+            user.auth.provider = "github.com";
+            user.auth.token = json["access_token"].get!string;
+            user.auth.scopes = json["scope"].get!string;
+
+            json = requestJSON(HTTPMethod.GET, "https://api.github.com/user", user.auth.token);
+            enforce("error" !in json, json["error"].toString);
+            user.username = json["login"].get!string;
+            user.name = json["name"].get!string;
+            user.email = json["email"].get!string;
+            return user;
+        }
+    }
+    else static if (provider == OAuth2Provider.BitBucket)
+    {
+        enum requestURL = "https://bitbucket.org/site/oauth2/authorize";
+        enum tokenURL = "https://bitbucket.org/site/oauth2/access_token";
+        enum scopes = "account";
+
+        User getUserInfo(Json json)
+        {
+            import std.array : empty, front;
+            import std.algorithm.searching : find;
+
+            User user;
+            user.auth.provider = "bitbucket.org";
+            user.auth.token = json["access_token"].get!string;
+            user.auth.refresh_token = json["refresh_token"].get!string;
+            user.auth.scopes = json["scopes"].get!string;
+
+            json = requestJSON(HTTPMethod.GET, "https://api.bitbucket.org/2.0/user", user.auth.token);
+            enforce("error" !in json, json["error"].toString);
+            user.username = json["username"].get!string;
+            user.name = json["display_name"].get!string;
+
+            json = requestJSON(HTTPMethod.GET, "https://api.bitbucket.org/2.0/user/emails", user.auth.token);
+            enforce("error" !in json, json["error"].toString);
+            auto mails = json["values"].opt!(Json[]).find!(m => m["is_primary"].opt!bool);
+            if (!mails.empty)
+                user.email = mails.front["email"].opt!string;
+            return user;
+        }
+    }
+    else static if (provider == OAuth2Provider.GitLab)
+    {
+        enum requestURL = "https://gitlab.com/oauth/authorize";
+        enum tokenURL = "https://gitlab.com/oauth/token";
+        enum scopes = "read_user";
+
+        User getUserInfo(Json json)
+        {
+            import std.algorithm.searching : find;
+
+            User user;
+            user.auth.provider = "gitlab.com";
+            user.auth.token = json["access_token"].get!string;
+            user.auth.refresh_token = json["refresh_token"].get!string;
+            user.auth.scopes = json["scope"].get!string;
+
+            json = requestJSON(HTTPMethod.GET, "https://gitlab.com/api/v4/user", user.auth.token);
+            enforce("error" !in json, json["error"].toString);
+            user.username = json["username"].get!string;
+            user.name = json["name"].get!string;
+            user.email = json["email"].get!string;
+            return user;
+        }
+    }
+
+    import testo.config : OAuthAppCredentials;
+    import std.exception : enforce;
+
+    DB db;
+    OAuthAppCredentials creds;
 }
 
 // https://gitlab.com/gitlab-org/gitlab-ce/blob/7f8c8dad8618574217dd96c38b40abcea387c4ea/lib/api/entities.rb#L1075
@@ -151,7 +372,7 @@ struct JobRequestResponse
 
 class GitlabRunnerAPI : IGitlabRunnerAPI
 {
-    this(Database db)
+    this(DB db)
     {
         this.db = db;
     }
@@ -259,5 +480,5 @@ private:
 
     uint _jobIds;
     uint[uint] _streamSize;
-    Database db;
+    DB db;
 }

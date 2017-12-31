@@ -7,7 +7,6 @@ import { Runner } from '../api';
     <p>
       {{ runner.name }}
       <span [ngClass]="runner.active ? 'active' : 'inactive'">●</span>
-      {{ runner.lastConnection }}
     </p>
   `,
   styles: ["span.active { color: green; }", "span.inactive { color: red; }"]

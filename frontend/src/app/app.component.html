@@ -1,6 +1,13 @@
+<nav class="navbar">
+  <div class="navbar-item">
+    <a routerLink="/builds" routerLinkActive="active">Builds</a>
+  </div>
+  <div class="navbar-item">
+    <a routerLink="/runners" routerLinkActive="active">Runners</a>
+  </div>
+  <a class="button button-primary navbar-item" routerLink="/login" routerLinkActive="active">Login</a>
+</nav>
 <section class="header">
   <h2>Testo</h2>
 </section>
-<runner *ngFor="let r of runners"
-  [runner]="r">
-</runner>
+<router-outlet></router-outlet>

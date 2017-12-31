@@ -1,0 +1,33 @@
+# All options can also be set or overridden via environment variables.
+
+# env:EXTERNAL_URL
+external_url: https://testo.example.com
+
+# env:ADMIN_USERS (comma separated)
+admin_users:
+  - github.com/MartinNowak
+  - bitbucket.org/dawgfoto
+
+# Github Application credentials for OAuth2 user logins
+# https://developer.github.com/apps/building-oauth-apps/authorization-options-for-oauth-apps/#web-application-flow
+github:
+  # env:GITHUB_CLIENT_ID
+  client_id: 7efpzlnxiekj5koypaow
+  # env:GITHUB_CLIENT_SECRET
+  client_secret: srnw8580klzmzsbfojuuwd5f40l0bwg45usl71kd
+
+# Bitbucket Application credentials for OAuth2 user logins
+# https://confluence.atlassian.com/bitbucket/oauth-on-bitbucket-cloud-238027431.html
+bitbucket:
+  # env:BITBUCKET_CLIENT_ID
+  client_id: yt4eO9xul8n82MNqam
+  # env:BITBUCKET_CLIENT_SECRET
+  client_secret: yLMrAhxWFUJronojheUMeyoGLcMc8UCw
+
+# GitLab Application credentials for OAuth2 user logins
+# https://docs.gitlab.com/ce/api/oauth2.html
+gitlab:
+  # env:GITLAB_CLIENT_ID
+  client_id: 423080f1039e2225470950e837e596844536e8e68e4576431f5328037736ef01
+  # env:GITLAB_CLIENT_ID
+  client_secret: e8e3e9e65796296924495e2530620524f857e30017e16942e6711e2e57864380

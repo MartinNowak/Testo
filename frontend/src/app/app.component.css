@@ -1,0 +1,37 @@
+.navbar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 6.5rem;
+  max-width: 36rem;
+  justify-content: space-between;
+}
+
+.navbar-item > a {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2rem;
+  text-decoration: none;
+  color: rgb(34, 34, 34);
+}
+
+.navbar a {
+  margin-bottom: 0;
+}
+
+.navbar a:hover:not(.button),
+.navbar a.active:not(.button) {
+  color: rgb(30, 174, 219);
+}
+
+/* from button.button-primary:focus */
+.navbar a.button.active {
+  color: #FFF;
+  background-color: #1EAEDB;
+  border-color: #1EAEDB;
+}
+
+button.navbar-item {
+  align-self: flex-end;
+}

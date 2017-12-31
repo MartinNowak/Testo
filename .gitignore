@@ -8,9 +8,11 @@ testo.dll
 testo.a
 testo.lib
 testo-test-*
-testo
+/testo
 testo.db
 *.exe
 *.o
 *.obj
 *.lst
+
+config.yml
